@@ -25,8 +25,11 @@ Locbook aims to provide the smallest possible implementation of a robust, person
 
 On your remote machine, install the necessary dependencies:
 ~~~~~~~~
-pip install ijson geojson
+python3 -m pip install -r requirements.txt
 ~~~~~~~~
+> Note: in order to work you need yajl library installed on your system. 
+You can install it by executing `sudo apt-get install libyajl-dev` on Linux and `brew install yajl` on Mac OS X. 
+
 Then, simply clone this repository and run `python3 locbook.py`. 
 This runs Locbook and creates an internal `history.pickle` file which contains all data sent by Owntracks. 
 To generate a human-readable backup of this data, use the `export_geojson` option. 
