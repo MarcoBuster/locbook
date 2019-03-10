@@ -166,3 +166,6 @@ fabric.properties
 # Editor-based Rest Client
 .idea/httpRequests
 
+# User-generated files
+history.pickle
+map.js
