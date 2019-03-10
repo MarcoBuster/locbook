@@ -7,18 +7,17 @@
 # https://github.com/isagalaev/ijson
 # https://github.com/frewsxcv/python-geojson
 
+# Standard packages
+import argparse
+import datetime
+import json
+import logging
+import pickle
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
 # 3rd party packages
 import geojson as gj
-import ijson.backends.yajl2_cffi as ijson 
-
-# Standard packages
-import time
-import datetime
-import pickle
-import logging
-import json
-import argparse
-from http.server import HTTPServer, BaseHTTPRequestHandler
+import ijson.backends.yajl2_cffi as ijson
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--import_google", "-i", help='Import Google location history JSON file and quit')
@@ -33,15 +32,15 @@ history = dict()
 js_filename = 'map.js'
 history_filename = 'history.pickle'
 geojson_filename = 'realtime.geojson'
-precision = 4 # Only 4 or 5 make sense for phone data
+precision = 4  # Only 4 or 5 make sense for phone data
 blur = 5
 port = args.port
 
 # Only log to file if argument is present
 logging.basicConfig(filename=args.logfile, level=logging.DEBUG, format='%(asctime)s %(message)s') 
 
-class RequestHandler(BaseHTTPRequestHandler):
 
+class RequestHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         request_headers = self.headers
         content_length = int(request_headers['Content-Length'])
@@ -49,9 +48,10 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.end_headers() 
 
-    def log_message(self, format, *args):
+    def log_message(self, f, **kwargs):
         # We don't need http.server to run its own log
         return 
+
 
 def load_history():
     global history
@@ -63,49 +63,53 @@ def load_history():
     except FileNotFoundError:
         logging.info('History not found, creating new file ' + history_filename)
         pass
-     
+
+
 def parse_msg(msg):
     data = json.loads(msg.decode("utf-8"))
-    if (data['_type'] == 'location'):
-
+    if data['_type'] == 'location':
         lon = round(data['lon'], precision)
         lat = round(data['lat'], precision)
 
-        p = (lon, lat)
-        d,t = tst_to_dt(data['tst'])
-        make_history(p, d, t, True)
+        point = (lon, lat)
+        date, time = tst_to_dt(data['tst'])
+        make_history(point, date, time, True)
 
         logging.info('Location update from device ' + data['tid'] + ': ' + json.dumps(data))
         write_js()
-        popup_content = 'Device: ' + data['tid'] + '<br>Date: ' + d + '<br>Time: ' + t
-        write_geojson(p, popup_content, geojson_filename)
+        popup_content = 'Device: ' + data['tid'] + '<br>Date: ' + date + '<br>Time: ' + time
+        write_geojson(point, popup_content, geojson_filename)
 
-def make_history(p, d, t, sour):
+
+def make_history(point, date, time, sour):
     global history
     # Defaultdict of defaultdicts
-    if p in history:
-        if d in history[p]:
-            history[p][d].append(t)
+    if point in history:
+        if date in history[point]:
+            history[point][date].append(time)
         else:
-            history[p][d] = [t]
+            history[point][date] = [time]
     else:
-        history[p] = dict()
-        history[p][d] = [t]
+        history[point] = dict()
+        history[point][date] = [time]
 
-    if (sour):
+    if sour:
         pickle.dump(history, open('history.pickle', 'wb'))
+
 
 def export_geojson(filename):
     global history
     logging.info('Exporting to ' + filename)
     with open(filename, 'w') as f:
         features = list()
-        for p,dt in history.items():
+        for point, dt in history.items():
             properties = dict()
-            for d,t in dt.items(): properties[d] = t
-            features.append(gj.Feature(geometry=gj.Point(p), properties=properties))
+            for date, time in dt.items():
+                properties[date] = time
+            features.append(gj.Feature(geometry=gj.Point(point), properties=properties))
         f.write(gj.dumps(gj.FeatureCollection(features)))
     f.close()
+
 
 def write_geojson(p, popup_content, filename):
     with open(filename, 'w') as f:
@@ -114,31 +118,35 @@ def write_geojson(p, popup_content, filename):
         f.write(gj.dumps(gj.FeatureCollection(features)))
     f.close()
 
+
 def import_google(filename):
     logging.info('Importing from ' + filename)
     # Needs to be rb!
     with open(filename, 'rb') as f:
         data = ijson.items(f, 'locations.item')
-        c=0
+        i = 0
         for o in data:
-            c+=1
-            p = (round(o['longitudeE7']/10000000, precision), round(o['latitudeE7']/10000000, precision))
-            d, t = tst_to_dt(int(o['timestampMs'][:-3]))
-            make_history(p, d, t, False)
+            i += 1
+            point = (round(o['longitudeE7']/10000000, precision), round(o['latitudeE7']/10000000, precision))
+            date, time = tst_to_dt(int(o['timestampMs'][:-3]))
+            make_history(point, date, time, False)
     f.close()
-    logging.info(str(c) + ' items imported from ' + filename)
+    logging.info(str(i) + ' items imported from ' + filename)
     logging.info('History size: ' + str(len(history)) + ' points')
     pickle.dump(history, open('history.pickle', 'wb'))
     write_js()
 
+
 def tst_to_dt(tst):
-    d = datetime.datetime.fromtimestamp(tst).strftime('%Y-%m-%d')
-    t = datetime.datetime.fromtimestamp(tst).strftime('%H-%M-%S')
-    return d, t
+    date = datetime.datetime.fromtimestamp(tst).strftime('%Y-%m-%d')
+    time = datetime.datetime.fromtimestamp(tst).strftime('%H-%M-%S')
+    return date, time
+
 
 def prec_to_m(prec):
     # https://en.wikipedia.org/wiki/Decimal_degrees
-    return(111320) / (10**prec)
+    return 111320 / (10**prec)
+
 
 def write_js():
     global history
@@ -146,27 +154,38 @@ def write_js():
     with open(js_filename, 'w') as f:
         f.write('var points = [')
         first = True
-        for p,dt in history.items():
-            v = 0
-            for d,t in dt.items():
-                v += len(t)
-            if (first):
-                pv_string = '[' + str(p[1]) + ',' + str(p[0]) + ',' + str(v) + ']'
+        for point, dt in history.items():
+            count = 0
+            for date, time in dt.items():
+                count += len(time)
+            if first:
+                pv_string = '[' + str(point[1]) + ',' + str(point[0]) + ',' + str(count) + ']'
                 first = False
             else:
-                pv_string = ',[' + str(p[1]) + ',' + str(p[0]) + ',' + str(v) + ']'
+                pv_string = ',[' + str(point[1]) + ',' + str(point[0]) + ',' + str(count) + ']'
             f.write(pv_string)
         f.write('];')
         f.write('config = {radius: ' + str(prec_to_m(precision)) + ',blur:' + str(blur) + '};')
     f.close()
 
-def main():
+
+def serve():
     server = HTTPServer(('', port), RequestHandler)
-    server.serve_forever() # Run the HTTP server
+    server.serve_forever()  # Run the HTTP server
+
+
+def main():
+    load_history()
+    if args.import_google:
+        import_google(args.import_google)
+        return
+
+    if args.export_geojson:
+        export_geojson(args.export_geojson)
+        return
+
+    serve()
+
 
 if __name__ == "__main__":
-    load_history()
-    if (args.import_google): import_google(args.import_google)
-    if (args.export_geojson): export_geojson(args.export_geojson)
-    # Running the import or export function quits the program afterwards
-    if (not args.import_google and not args.export_geojson): main()
+    main()
