@@ -19,6 +19,8 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import geojson as gj
 import ijson.backends.yajl2_cffi as ijson
 
+import config
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--import_google", "-i", help='Import Google location history JSON file and quit')
 parser.add_argument("--export_geojson", "-e", help='Export location history as GeoJSON file and quit')
@@ -28,13 +30,9 @@ args = parser.parse_args()
 
 history = dict()
 
-# Defaults
-js_filename = 'map.js'
-history_filename = 'history.pickle'
-geojson_filename = 'realtime.geojson'
-precision = 4  # Only 4 or 5 make sense for phone data
-blur = 5
-port = args.port
+# Assets
+JS_MAP_FILE = 'map.js'
+GEOJSON_FILE = 'realtime.geojson'
 
 # Only log to file if argument is present
 logging.basicConfig(filename=args.logfile, level=logging.DEBUG, format='%(asctime)s %(message)s') 
@@ -56,20 +54,20 @@ class RequestHandler(BaseHTTPRequestHandler):
 def load_history():
     global history
     # Load history from pickle file
-    logging.info('Loading history from ' + history_filename)
+    logging.info('Loading history from ' + config.HISTORY_FILE)
     try: 
-        history = pickle.load(open(history_filename, 'rb'))
+        history = pickle.load(open(config.HISTORY_FILE, 'rb'))
         logging.info('History size: ' + str(len(history)) + ' points')   
     except FileNotFoundError:
-        logging.info('History not found, creating new file ' + history_filename)
+        logging.info('History not found, creating new file ' + config.HISTORY_FILE)
         pass
 
 
 def parse_msg(msg):
     data = json.loads(msg.decode("utf-8"))
     if data['_type'] == 'location':
-        lon = round(data['lon'], precision)
-        lat = round(data['lat'], precision)
+        lon = round(data['lon'], config.PRECISION)
+        lat = round(data['lat'], config.PRECISION)
 
         point = (lon, lat)
         date, time = tst_to_dt(data['tst'])
@@ -78,7 +76,7 @@ def parse_msg(msg):
         logging.info('Location update from device ' + data['tid'] + ': ' + json.dumps(data))
         write_js()
         popup_content = 'Device: ' + data['tid'] + '<br>Date: ' + date + '<br>Time: ' + time
-        write_geojson(point, popup_content, geojson_filename)
+        write_geojson(point, popup_content, GEOJSON_FILE)
 
 
 def make_history(point, date, time, sour):
@@ -127,7 +125,8 @@ def import_google(filename):
         i = 0
         for o in data:
             i += 1
-            point = (round(o['longitudeE7']/10000000, precision), round(o['latitudeE7']/10000000, precision))
+            point = (round(o['longitudeE7']/10000000, config.PRECISION),
+                     round(o['latitudeE7']/10000000, config.PRECISION))
             date, time = tst_to_dt(int(o['timestampMs'][:-3]))
             make_history(point, date, time, False)
     f.close()
@@ -151,7 +150,7 @@ def prec_to_m(prec):
 def write_js():
     global history
     logging.info('Updating .js file')
-    with open(js_filename, 'w') as f:
+    with open(JS_MAP_FILE, 'w') as f:
         f.write('var points = [')
         first = True
         for point, dt in history.items():
@@ -165,12 +164,12 @@ def write_js():
                 pv_string = ',[' + str(point[1]) + ',' + str(point[0]) + ',' + str(count) + ']'
             f.write(pv_string)
         f.write('];')
-        f.write('config = {radius: ' + str(prec_to_m(precision)) + ',blur:' + str(blur) + '};')
+        f.write('config = {radius: ' + str(prec_to_m(config.PRECISION)) + ',blur:' + str(config.BLUR) + '};')
     f.close()
 
 
 def serve():
-    server = HTTPServer(('', port), RequestHandler)
+    server = HTTPServer(('', int(args.port)), RequestHandler)
     server.serve_forever()  # Run the HTTP server
 
 

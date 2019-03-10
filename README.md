@@ -27,7 +27,11 @@ On your remote machine, install the necessary dependencies:
 ~~~~~~~~
 pip install ijson geojson
 ~~~~~~~~
-Then, simply clone this repository and run `python3 locbook.py`. This runs Locbook and creates an internal `history.pickle` file which contains all data sent by Owntracks. To generate a human-readable backup of this data, use the `export_geojson` option. 
+Then, simply clone this repository and run `python3 locbook.py`. 
+This runs Locbook and creates an internal `history.pickle` file which contains all data sent by Owntracks. 
+To generate a human-readable backup of this data, use the `export_geojson` option. 
+
+If you want to customize history file location and other settings, edit `config.py` file.
 
 Most likely, you will want to run Locbook in the background and independent of your SSH session on your remote machine. This can be achieved by running:
 ~~~~~~~~
